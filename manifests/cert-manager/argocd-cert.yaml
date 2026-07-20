@@ -1,0 +1,13 @@
+# manifests/cert-manager/argocd-cert.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argocd-cert
+  namespace: argocd
+spec:
+  secretName: argocd-tls
+  issuerRef:
+    name: selfsigned
+    kind: ClusterIssuer
+  dnsNames:
+    - argocd.lab

@@ -109,3 +109,10 @@ rag/configure:
 		--from-literal=OLLAMA_EMBED_MODEL="nomic-embed-text" \
 		--dry-run=client -o yaml | kubectl apply -f -
 	make rag/rollout
+
+rag-ui/build:
+	docker build -t localhost:5001/rag-ui:latest rag-ui/
+	docker push localhost:5001/rag-ui:latest
+
+rag-ui/rollout: rag-ui/build
+	kubectl rollout restart deployment/rag-ui -n rag

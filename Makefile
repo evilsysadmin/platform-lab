@@ -5,17 +5,27 @@ CERT_MANAGER_VERSION := v1.20.1
 
 .PHONY: kind argocd/setup argocd/password argocd/ui envoy-gateway metallb hosts cert-manager bootstrap
 
-kind:
-	kind create cluster --config kind/kind-config.yaml
 
-bootstrap: namespace cert-manager envoy-gateway metallb argocd/setup hosts
+dependencies:
+	sudo nvidia-ctk runtime configure --runtime=docker --set-as-default --cdi.enabled
+	sudo nvidia-ctk config --set accept-nvidia-visible-devices-as-volume-mounts=true --in-place
+	sudo systemctl restart docker
+	go install github.com/NVIDIA/nvkind/cmd/nvkind@latest
+	helm repo add nvdp https://nvidia.github.io/k8s-device-plugin
+	helm repo update	
+
+nvkind:
+	nvkind cluster create --name platform-lab
+
+bootstrap: nvkind cert-manager envoy-gateway metallb argocd/setup hosts
 
 namespace:
 	kubectl apply -f manifests/namespace/
 
-argocd/setup: namespace
+argocd/setup:
+	kubectl apply -f manifests/namespace/
 	kubectl apply -n argocd --server-side -f https://raw.githubusercontent.com/argoproj/argo-cd/$(ARGOCD_VERSION)/manifests/install.yaml
-	kubectl apply -f manifests/argocd/
+	kubectl apply -f manifests/argocd/          # DESPUÉS del install — sobreescribe
 	kubectl rollout restart deployment argocd-server -n argocd
 	kubectl rollout status deployment argocd-server -n argocd
 	kubectl apply -f manifests/cert-manager/argocd-cert.yaml
@@ -34,7 +44,7 @@ envoy-gateway:
 
 metallb:
 	kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/$(METALLB_VERSION)/config/manifests/metallb-native.yaml
-	kubectl wait --for=condition=ready pod -l	 app=metallb -n metallb-system --timeout=90s
+	kubectl wait --for=condition=ready pod -l	 app=metallb -n metallb-system --timeout=100s
 	kubectl apply -f manifests/metallb/l2advertisement.yaml
 	./scripts/metallb-config.sh
 
@@ -45,10 +55,16 @@ hosts:
 
 cert-manager:
 	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
-	kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=90s
-	kubectl apply -f manifests/cert-manager/clusterissuer.yaml
+	kubectl wait --for=condition=established crd/certificates.cert-manager.io --timeout=60s
+	kubectl rollout status deployment/cert-manager -n cert-manager --timeout=120s
+	kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=120s
+	kubectl rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=120s
+	until kubectl apply -f manifests/cert-manager/clusterissuer.yaml 2>/dev/null; do \
+		echo "Waiting for cert-manager webhook..."; \
+		sleep 5; \
+	done
 
 wipe:
 	kind delete cluster --name platform-lab
 
-reset: wipe kind bootstrap
+reset: wipe nvkind bootstrap

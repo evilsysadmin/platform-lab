@@ -26,6 +26,11 @@ make argocd/password
 
 ArgoCD UI available at https://argocd.lab (add to /etc/hosts via `make hosts` - done automatically with `make bootstrap`)
 
+## GPU Support (WIP)
+
+GPU support via [nvkind](https://github.com/NVIDIA/nvkind) is work in progress.
+Currently investigating NVML library mounting in Kind nodes.
+
 ## Roadmap
 
 - [v0.1 Foundation](https://github.com/evilsysadmin/platform-lab/milestone/1) ✅

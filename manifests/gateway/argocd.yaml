@@ -7,6 +7,9 @@ metadata:
 spec:
   gatewayClassName: eg
   listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
     - name: https
       protocol: HTTPS
       port: 443
@@ -14,9 +17,24 @@ spec:
         mode: Terminate
         certificateRefs:
           - name: argocd-tls
-    - name: http
-      protocol: HTTP
-      port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: argocd-redirect
+  namespace: argocd
+spec:
+  parentRefs:
+    - name: argocd-gateway
+      sectionName: http
+  hostnames:
+    - argocd.lab
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

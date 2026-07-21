@@ -1,0 +1,21 @@
+# argocd/applications/rag-ui.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rag-ui
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/evilsysadmin/platform-lab
+    targetRevision: HEAD
+    path: rag-ui/k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: rag
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

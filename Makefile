@@ -105,7 +105,7 @@ rag/configure:
 	echo "Ollama IP: $$OLLAMA_IP" && \
 	kubectl create configmap rag-config -n rag \
 		--from-literal=OLLAMA_URL="http://$$OLLAMA_IP:11434" \
-		--from-literal=OLLAMA_MODEL="llama3.2:3b" \
+		--from-literal=OLLAMA_MODEL="mistral:7b" \
 		--from-literal=OLLAMA_EMBED_MODEL="nomic-embed-text" \
 		--dry-run=client -o yaml | kubectl apply -f -
 	make rag/rollout

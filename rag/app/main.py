@@ -74,7 +74,7 @@ async def ingest(file: UploadFile = File(...)):
         tmp_path = tmp.name
     loader = PyPDFLoader(tmp_path)
     docs = loader.load()
-    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=50)
     chunks = splitter.split_documents(docs)
     vs.add_documents(chunks)
     os.unlink(tmp_path)
@@ -86,10 +86,16 @@ async def query(req: QueryRequest):
     loop = asyncio.get_event_loop()
     docs = await loop.run_in_executor(
         executor,
-        lambda: vs.similarity_search(req.question, k=3)
+        lambda: vs.similarity_search(req.question, k=5)
     )
     context = "\n".join([d.page_content for d in docs])
-    prompt = f"Context:\n{context}\n\nQuestion: {req.question}\n\nAnswer:"
+    prompt = f"""You have access to the following document context:
+
+{context}
+
+Based ONLY on the above context, answer this question: {req.question}
+
+If the context doesn't contain enough information, say so."""
     response = await loop.run_in_executor(
         executor,
         lambda: get_ollama_client().generate(model=MODEL, prompt=prompt)

@@ -15,9 +15,13 @@ dependencies:
 	helm repo update	
 
 nvkind:
-	nvkind cluster create --name platform-lab
+	nvkind cluster create --name platform-lab --config-template kind/nvkind-config.yaml
 
-bootstrap: nvkind namespace cert-manager envoy-gateway metallb argocd/setup hosts
+bootstrap: nvkind namespace registry/create cert-manager envoy-gateway metallb argocd/setup hosts
+	
+registry/create:
+	docker run -d --restart=always -p 5001:5000 --name kind-registry registry:2 || true
+	docker network connect kind kind-registry || true
 
 namespace:
 	kubectl apply -f manifests/namespace/
@@ -43,14 +47,27 @@ envoy-gateway:
 
 metallb:
 	kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/$(METALLB_VERSION)/config/manifests/metallb-native.yaml
-	kubectl wait --for=condition=ready pod -l	 app=metallb -n metallb-system --timeout=100s
 	kubectl apply -f manifests/metallb/l2advertisement.yaml
 	./scripts/metallb-config.sh
 
 hosts:
 	sudo sed -i '/argocd.lab/d' /etc/hosts
-	@IP=$$(kubectl get gateway argocd-gateway -n argocd -o jsonpath='{.status.addresses[0].value}') && \
+	sudo sed -i '/rag.lab/d' /etc/hosts
+	@echo "Waiting for argocd gateway..."
+	kubectl wait --for=jsonpath='{.status.addresses[0].value}' \
+		gateway/argocd-gateway -n argocd --timeout=120s
+	@IP=$$(kubectl get gateway argocd-gateway -n argocd \
+		-o jsonpath='{.status.addresses[0].value}') && \
 	echo "$$IP argocd.lab" | sudo tee -a /etc/hosts
+	@echo "Waiting for ArgoCD to sync RAG app..."
+	kubectl wait --for=jsonpath='{.status.sync.status}'=Synced \
+		application/rag -n argocd --timeout=300s
+	@echo "Waiting for rag gateway..."
+	kubectl wait --for=jsonpath='{.status.addresses[0].value}' \
+		gateway/rag-gateway -n rag --timeout=120s
+	@IP=$$(kubectl get gateway rag-gateway -n rag \
+		-o jsonpath='{.status.addresses[0].value}') && \
+	echo "$$IP rag.lab" | sudo tee -a /etc/hosts
 
 cert-manager:
 	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
@@ -67,3 +84,13 @@ wipe:
 	kind delete cluster --name platform-lab
 
 reset: wipe nvkind bootstrap
+
+rag/build:
+	docker build -t localhost:5001/rag-api:latest rag/
+	docker push localhost:5001/rag-api:latest
+
+rag/deploy: rag/build
+	kubectl apply -f rag/k8s/
+
+rag/rollout: rag/build rag/deploy
+	kubectl rollout restart deployment/rag-api -n rag

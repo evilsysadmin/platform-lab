@@ -11,3 +11,10 @@ metadata:
   name: nvidia
   labels:
     name: nvidia
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rag
+  labels:
+    name: rag

@@ -1,0 +1,19 @@
+# rag-ui/k8s/gateway.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: rag-ui
+  namespace: rag
+spec:
+  parentRefs:
+    - name: rag-gateway
+  hostnames:
+    - rag.lab
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: rag-ui
+          port: 80

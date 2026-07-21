@@ -1,0 +1,22 @@
+# rag-ui/k8s/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-ui
+  namespace: rag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rag-ui
+  template:
+    metadata:
+      labels:
+        app: rag-ui
+    spec:
+      containers:
+        - name: rag-ui
+          image: localhost:5001/rag-ui:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG — platform-lab</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, sans-serif; background: #0f1117; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
+        header { padding: 1rem 2rem; border-bottom: 1px solid #2a2a3a; display: flex; align-items: center; gap: 1rem; }
+        header h1 { font-size: 1.2rem; font-weight: 600; }
+        header span { font-size: 0.75rem; color: #666; background: #1a1a2a; padding: 0.2rem 0.6rem; border-radius: 999px; }
+        main { flex: 1; display: flex; overflow: hidden; }
+        .sidebar { width: 280px; border-right: 1px solid #2a2a3a; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+        .sidebar h2 { font-size: 0.85rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
+        .upload-area { border: 2px dashed #2a2a3a; border-radius: 8px; padding: 1.5rem; text-align: center; cursor: pointer; transition: border-color 0.2s; }
+        .upload-area:hover { border-color: #4a9eff; }
+        .upload-area input { display: none; }
+        .upload-area p { font-size: 0.85rem; color: #666; margin-top: 0.5rem; }
+        .btn { background: #4a9eff; color: white; border: none; padding: 0.6rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; width: 100%; }
+        .btn:hover { background: #3a8eef; }
+        .btn:disabled { background: #2a2a3a; color: #666; cursor: not-allowed; }
+        .status { font-size: 0.8rem; color: #666; text-align: center; }
+        .status.success { color: #4ade80; }
+        .status.error { color: #f87171; }
+        .chat { flex: 1; display: flex; flex-direction: column; }
+        .messages { flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+        .message { max-width: 80%; padding: 0.8rem 1rem; border-radius: 8px; font-size: 0.9rem; line-height: 1.5; }
+        .message.user { background: #1e3a5f; align-self: flex-end; }
+        .message.assistant { background: #1a1a2a; align-self: flex-start; border: 1px solid #2a2a3a; }
+        .message .sources { font-size: 0.75rem; color: #666; margin-top: 0.5rem; }
+        .input-area { padding: 1rem 1.5rem; border-top: 1px solid #2a2a3a; display: flex; gap: 0.5rem; }
+        .input-area input { flex: 1; background: #1a1a2a; border: 1px solid #2a2a3a; border-radius: 6px; padding: 0.7rem 1rem; color: #e0e0e0; font-size: 0.9rem; }
+        .input-area input:focus { outline: none; border-color: #4a9eff; }
+        .input-area button { background: #4a9eff; color: white; border: none; padding: 0.7rem 1.2rem; border-radius: 6px; cursor: pointer; }
+        .input-area button:disabled { background: #2a2a3a; color: #666; cursor: not-allowed; }
+        .thinking { color: #666; font-style: italic; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🤖 RAG Chat</h1>
+        <span>llama3.2:3b · nomic-embed-text</span>
+    </header>
+    <main>
+        <div class="sidebar">
+            <h2>Documents</h2>
+            <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                <div>📄</div>
+                <p>Click to upload PDF</p>
+                <input type="file" id="fileInput" accept=".pdf" onchange="uploadFile(this)">
+            </div>
+            <button class="btn" id="uploadBtn" disabled>Upload</button>
+            <div class="status" id="uploadStatus"></div>
+        </div>
+        <div class="chat">
+            <div class="messages" id="messages">
+                <div class="message assistant">
+                    Hello! Upload a PDF document and ask me anything about it.
+                </div>
+            </div>
+            <div class="input-area">
+                <input type="text" id="questionInput" placeholder="Ask a question..." onkeydown="if(event.key==='Enter') sendMessage()">
+                <button onclick="sendMessage()" id="sendBtn">Send</button>
+            </div>
+        </div>
+    </main>
+    <script>
+        let selectedFile = null;
+
+        function uploadFile(input) {
+            selectedFile = input.files[0];
+            if (selectedFile) {
+                document.getElementById('uploadBtn').disabled = false;
+                document.getElementById('uploadStatus').textContent = selectedFile.name;
+                document.getElementById('uploadBtn').onclick = doUpload;
+            }
+        }
+
+        async function doUpload() {
+            const btn = document.getElementById('uploadBtn');
+            const status = document.getElementById('uploadStatus');
+            btn.disabled = true;
+            status.className = 'status';
+            status.textContent = 'Uploading...';
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            try {
+                const res = await fetch('/api/ingest', { method: 'POST', body: formData });
+                const data = await res.json();
+                status.className = 'status success';
+                status.textContent = `✓ ${data.ingested} chunks indexed`;
+            } catch (e) {
+                status.className = 'status error';
+                status.textContent = '✗ Upload failed';
+                btn.disabled = false;
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('questionInput');
+            const question = input.value.trim();
+            if (!question) return;
+            input.value = '';
+            addMessage(question, 'user');
+            const thinking = addMessage('Thinking...', 'assistant thinking');
+            document.getElementById('sendBtn').disabled = true;
+            try {
+                const res = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question })
+                });
+                const data = await res.json();
+                thinking.remove();
+                const msg = addMessage(data.answer, 'assistant');
+                if (data.sources > 0) {
+                    const src = document.createElement('div');
+                    src.className = 'sources';
+                    src.textContent = `${data.sources} source(s) retrieved`;
+                    msg.appendChild(src);
+                }
+            } catch (e) {
+                thinking.textContent = 'Error: could not get response';
+            }
+            document.getElementById('sendBtn').disabled = false;
+        }
+
+        function addMessage(text, className) {
+            const messages = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = `message ${className}`;
+            div.textContent = text;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+            return div;
+        }
+    </script>
+</body>
+</html>

@@ -14,6 +14,30 @@ covering the full stack from infrastructure to AI workloads.
 - **Ollama + RAG** — local LLM inference and retrieval _(coming)_
 - **Envoy AI Gateway** — LLM traffic management _(coming)_
 
+## Ollama (Local LLM)
+
+Ollama runs on the host machine with GPU acceleration, accessible from the Kind cluster at `http://172.21.0.1:11434`.
+
+### Setup
+
+```bash
+# Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Configure to listen on all interfaces
+sudo mkdir -p /etc/systemd/system/ollama.service.d/
+sudo tee /etc/systemd/system/ollama.service.d/override.conf << 'EOF'
+[Service]
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl restart ollama
+
+# Pull model
+ollama pull llama3.2:3b
+```
+
 ## Getting started
 
 ```bash

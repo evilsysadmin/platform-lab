@@ -17,13 +17,12 @@ dependencies:
 nvkind:
 	nvkind cluster create --name platform-lab
 
-bootstrap: nvkind cert-manager envoy-gateway metallb argocd/setup hosts
+bootstrap: nvkind namespace cert-manager envoy-gateway metallb argocd/setup hosts
 
 namespace:
 	kubectl apply -f manifests/namespace/
 
 argocd/setup:
-	kubectl apply -f manifests/namespace/
 	kubectl apply -n argocd --server-side -f https://raw.githubusercontent.com/argoproj/argo-cd/$(ARGOCD_VERSION)/manifests/install.yaml
 	kubectl apply -f manifests/argocd/          # DESPUÉS del install — sobreescribe
 	kubectl rollout restart deployment argocd-server -n argocd

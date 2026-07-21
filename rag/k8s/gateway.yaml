@@ -26,6 +26,9 @@ spec:
         - path:
             type: PathPrefix
             value: /
+      timeouts:
+        request: 120s
+        backendRequest: 120s
       backendRefs:
         - name: rag-api
           port: 8000

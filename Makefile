@@ -17,8 +17,8 @@ dependencies:
 nvkind:
 	nvkind cluster create --name platform-lab --config-template kind/nvkind-config.yaml
 
-bootstrap: nvkind namespace registry/create cert-manager envoy-gateway metallb argocd/setup hosts
-	
+bootstrap: nvkind namespace cert-manager envoy-gateway metallb argocd/setup hosts rag/configure
+
 registry/create:
 	docker run -d --restart=always -p 5001:5000 --name kind-registry registry:2 || true
 	docker network connect kind kind-registry || true
@@ -47,6 +47,7 @@ envoy-gateway:
 
 metallb:
 	kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/$(METALLB_VERSION)/config/manifests/metallb-native.yaml
+	kubectl wait --for=condition=ready pod -l	 app=metallb -n metallb-system --timeout=100s
 	kubectl apply -f manifests/metallb/l2advertisement.yaml
 	./scripts/metallb-config.sh
 
@@ -59,10 +60,13 @@ hosts:
 	@IP=$$(kubectl get gateway argocd-gateway -n argocd \
 		-o jsonpath='{.status.addresses[0].value}') && \
 	echo "$$IP argocd.lab" | sudo tee -a /etc/hosts
-	@echo "Waiting for ArgoCD to sync RAG app..."
+	@echo "Waiting for ArgoCD to create RAG app..."
+	until kubectl get application rag -n argocd 2>/dev/null; do \
+		echo "RAG app not yet created, waiting..."; \
+		sleep 10; \
+	done
 	kubectl wait --for=jsonpath='{.status.sync.status}'=Synced \
 		application/rag -n argocd --timeout=300s
-	@echo "Waiting for rag gateway..."
 	kubectl wait --for=jsonpath='{.status.addresses[0].value}' \
 		gateway/rag-gateway -n rag --timeout=120s
 	@IP=$$(kubectl get gateway rag-gateway -n rag \
@@ -88,9 +92,20 @@ reset: wipe nvkind bootstrap
 rag/build:
 	docker build -t localhost:5001/rag-api:latest rag/
 	docker push localhost:5001/rag-api:latest
+	kubectl rollout restart deployment/rag-api -n rag
 
 rag/deploy: rag/build
 	kubectl apply -f rag/k8s/
 
 rag/rollout: rag/build rag/deploy
 	kubectl rollout restart deployment/rag-api -n rag
+
+rag/configure:
+	@OLLAMA_IP=$$(docker network inspect kind | jq -r '.[0].IPAM.Config[] | select(.Subnet | contains(".")) | .Gateway') && \
+	echo "Ollama IP: $$OLLAMA_IP" && \
+	kubectl create configmap rag-config -n rag \
+		--from-literal=OLLAMA_URL="http://$$OLLAMA_IP:11434" \
+		--from-literal=OLLAMA_MODEL="llama3.2:3b" \
+		--from-literal=OLLAMA_EMBED_MODEL="nomic-embed-text" \
+		--dry-run=client -o yaml | kubectl apply -f -
+	make rag/rollout

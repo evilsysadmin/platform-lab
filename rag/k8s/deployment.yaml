@@ -18,12 +18,12 @@ spec:
         - name: rag-api
           image: localhost:5001/rag-api:latest
           ports:
-            - containerPort: 8000
-          env:
-            - name: OLLAMA_URL
-              value: "http://172.21.0.1:11434"
-            - name: OLLAMA_MODEL
-              value: "llama3.2:3b"
+            - containerPort: 8000            
+         
+          envFrom:
+            - configMapRef:
+                name: rag-config
+
           volumeMounts:
             - name: chroma-data
               mountPath: /data/chroma
